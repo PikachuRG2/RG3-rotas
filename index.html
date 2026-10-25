@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#101820">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>RG2 Rotas — Navegador para Motoboy</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<style>
+:root{--bg:#101820;--panel:#18232d;--panel2:#202e3a;--text:#f3f6f8;--muted:#a9b7c3;--accent:#39b6ff;--green:#4ade80;--border:#334553;--danger:#fb7185}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{padding:16px max(16px,env(safe-area-inset-left));background:#0b1117;border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:center}
+.logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#1687ff,#26d0a0);display:grid;place-items:center;font-weight:900;color:#06131c}
+h1{font-size:18px;margin:0}header p{margin:2px 0 0;color:var(--muted);font-size:12px}
+main{display:grid;grid-template-columns:minmax(300px,390px) 1fr;min-height:calc(100vh - 74px)}
+aside{padding:14px;overflow:auto;border-right:1px solid var(--border);max-height:calc(100vh - 74px)}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:12px}
+h2{font-size:15px;margin:0 0 10px}label{font-size:13px;color:var(--muted);display:block;margin-bottom:7px}
+input[type=text],textarea{width:100%;background:#0f171e;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;font:inherit;font-size:14px}
+textarea{resize:vertical;min-height:74px}input[type=file]{width:100%;font-size:13px;color:var(--muted)}
+button,.button{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:0;border-radius:10px;padding:11px 13px;font:600 14px system-ui;cursor:pointer;text-decoration:none}
+.primary{background:var(--accent);color:#06131c}.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--border)}.success{background:var(--green);color:#06200f}.danger{background:#4a202a;color:#ffd9df;border:1px solid #733443}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}.row>*{flex:1}
+.hint{font-size:12px;color:var(--muted);line-height:1.45;margin:8px 0 0}.status{font-size:13px;color:var(--muted);line-height:1.45}.status strong{color:var(--text)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}.stat{background:#101820;border-radius:10px;padding:10px}.stat small{display:block;color:var(--muted);font-size:11px}.stat b{font-size:18px}
+#map{height:calc(100vh - 74px);min-height:460px;background:#dce5e9}.stop{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}.stop:last-child{border-bottom:0}.num{width:30px;height:30px;flex:0 0 30px;background:var(--panel2);border-radius:50%;display:grid;place-items:center;font-weight:700}.stop.active .num{background:var(--accent);color:#06131c}.stop.done{opacity:.55}.stoptext{flex:1;min-width:0}.stoptext b{font-size:13px;display:block}.stoptext small{font-size:11px;color:var(--muted);overflow-wrap:anywhere}.stop button{padding:8px;font-size:12px}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:9999;background:#0b1117;color:white;border:1px solid var(--border);padding:11px 15px;border-radius:12px;max-width:90vw;display:none;box-shadow:0 8px 30px #0008}
+@media(max-width:800px){main{display:flex;flex-direction:column}#map{order:0;height:48vh;min-height:300px}aside{order:1;max-height:none;border-right:0;padding:10px}.panel{margin-bottom:10px}header{padding-top:max(12px,env(safe-area-inset-top))}}
+</style>
+</head>
+<body>
+<header><div class="logo">RG2</div><div><h1>RG2 Rotas</h1><p>Navegador de rotas para motoboy</p></div></header>
+<main>
+<aside>
+  <section class="panel">
+    <h2>1. Importar uma rota</h2>
+    <label for="file">Arquivo JSON ou GeoJSON</label>
+    <input id="file" type="file" accept=".json,.geojson,application/json,application/geo+json">
+    <p class="hint">Aceita GeoJSON com Point, MultiPoint, LineString, MultiLineString e GeometryCollection. Um arquivo com uma linha desenha o trajeto; pontos separados viram paradas.</p>
+    <div class="row"><button class="secondary" id="sample">Carregar exemplo</button><button class="danger" id="clear">Limpar rota</button></div>
+  </section>
+  <section class="panel">
+    <h2>2. Ou colar um link do Google Maps</h2>
+    <label for="mapslink">Link, endereço ou coordenadas</label>
+    <textarea id="mapslink" placeholder="Cole aqui o link do Google Maps, um endereço ou coordenadas como -10.175, -48.882"></textarea>
+    <div class="row"><button class="primary" id="addLink">Adicionar destino</button></div>
+    <p class="hint">Links curtos maps.app.goo.gl podem não revelar as coordenadas diretamente no navegador. Se não funcionar, abra o link no Maps e copie o link completo ou cole as coordenadas/endereço.</p>
+  </section>
+  <section class="panel">
+    <h2>3. Navegação</h2>
+    <div class="stats">
+      <div class="stat"><small>Destinos pendentes</small><b id="pending">0</b></div>
+      <div class="stat"><small>Distância GPS ao destino</small><b id="distance">—</b></div>
+    </div>
+    <p class="status" id="gpsStatus" style="margin-top:10px">GPS ainda não iniciado.</p>
+    <div class="row"><button class="primary" id="gps">Ativar GPS</button><button class="secondary" id="fit">Ver rota inteira</button></div>
+    <div class="row"><button class="success" id="navigate">Abrir destino no Google Maps</button></div>
+    <p class="hint">Para obter GPS, abra o site por HTTPS e permita o acesso à localização. A navegação dentro do site mostra mapa e distância; o Google Maps fornece instruções curva a curva e voz.</p>
+  </section>
+  <section class="panel">
+    <h2>Próxima entrega</h2>
+    <div id="nextStop" class="status">Importe um arquivo ou adicione um destino para começar.</div>
+    <div class="row"><button class="success" id="done">Marcar entrega concluída</button><button class="secondary" id="skip">Próxima</button></div>
+  </section>
+  <section class="panel">
+    <h2>Lista de destinos</h2>
+    <div id="stops"><p class="status">Nenhum destino carregado.</p></div>
+  </section>
+  <section class="panel">
+    <h2>Rotas salvas neste aparelho</h2>
+    <label for="routeName">Nome da rota atual</label>
+    <input id="routeName" type="text" placeholder="Ex.: Entregas da manhã">
+    <div class="row"><button class="primary" id="saveRoute">Salvar rota</button><button class="secondary" id="exportRoute">Exportar JSON</button></div>
+    <label for="savedRoutes" style="margin-top:12px">Rotas salvas</label>
+    <select id="savedRoutes" style="width:100%;background:#0f171e;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;font:inherit;font-size:14px">
+      <option value="">Nenhuma rota salva</option>
+    </select>
+    <div class="row"><button class="secondary" id="loadRoute">Abrir rota</button><button class="danger" id="deleteRoute">Excluir salva</button></div>
+    <p class="hint">As rotas são guardadas apenas neste navegador/aparelho. Limpar dados do navegador pode apagá-las.</p>
+  </section>
+  <section class="panel">
+    <h2>Instalar RG2 Rotas</h2>
+    <p class="status" id="installStatus">Você pode adicionar o site à tela inicial pelo menu do navegador.</p>
+    <div class="row"><button class="primary" id="installApp" style="display:none">Instalar aplicativo</button><button class="secondary" id="refreshApp">Atualizar página</button></div>
+    <p class="hint">Para instalar e usar recursos PWA, publique o site em HTTPS. O mapa precisa de internet para carregar; o cache offline guarda a interface, mas não garante navegação ou mapas sem conexão.</p>
+  </section>
+  <p class="hint">O mapa usa OpenStreetMap. O cálculo de ruas depende de serviços públicos e pode ter limites de uso. Não use o celular enquanto conduz; configure a rota antes de sair.</p>
+</aside>
+<div id="map" role="application" aria-label="Mapa da rota"></div>
+</main>
+<div id="toast"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+(() => {
+ const $ = id => document.getElementById(id);
+ const map = L.map('map').setView([-10.175,-48.882], 13);
+ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+ let stops=[], routeLayers=[], userMarker=null, accuracyCircle=null, userPos=null, watchId=null, routeLine=null, lineCoords=[];
+ let toastTimer;
+ function toast(msg){const el=$('toast');el.textContent=msg;el.style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.style.display='none',4000)}
+ function validCoord(lat,lon){return Number.isFinite(lat)&&Number.isFinite(lon)&&lat>=-90&&lat<=90&&lon>=-180&&lon<=180}
+ function addStop(lat,lon,label='Destino'){if(!validCoord(lat,lon))return false;stops.push({lat,lon,label,done:false});renderStops();return true}
+ function clearLayers(){routeLayers.forEach(x=>map.removeLayer(x));routeLayers=[];if(routeLine){map.removeLayer(routeLine);routeLine=null}lineCoords=[]}
+ function drawLine(coords){if(coords.length<2)return;lineCoords=coords;routeLine=L.polyline(coords,{color:'#087fe7',weight:5,opacity:.85}).addTo(map);routeLayers.push(routeLine)}
+ function clearRoute(){stops=[];clearLayers();renderStops();$('file').value='';$('mapslink').value='';toast('Rota limpa.')}
+ function coordsFromGeometry(geom, labelPrefix='Ponto'){
+   if(!geom)return;
+   const addPoint=c=>{if(Array.isArray(c)&&c.length>=2&&validCoord(Number(c[1]),Number(c[0])))addStop(Number(c[1]),Number(c[0]),labelPrefix+' '+(stops.length+1))};
+   const line=c=>{const coords=(c||[]).filter(p=>Array.isArray(p)&&p.length>=2).map(p=>[Number(p[1]),Number(p[0])]).filter(p=>validCoord(p[0],p[1]));if(coords.length>=2)drawLine(coords);};
+   switch(geom.type){
+    case 'Point': addPoint(geom.coordinates);break;
+    case 'MultiPoint': (geom.coordinates||[]).forEach(addPoint);break;
+    case 'LineString': line(geom.coordinates);break;
+    case 'MultiLineString': (geom.coordinates||[]).forEach(line);break;
+    case 'Polygon': (geom.coordinates||[]).forEach(line);break;
+    case 'MultiPolygon': (geom.coordinates||[]).forEach(poly=>poly.forEach(line));break;
+    case 'GeometryCollection': (geom.geometries||[]).forEach(g=>coordsFromGeometry(g,labelPrefix));break;
+   }
+ }
+ function parseJson(data){
+   clearLayers();stops=[];
+   if(data.type==='FeatureCollection') (data.features||[]).forEach((f,i)=>{if(f.geometry)coordsFromGeometry(f.geometry,'Ponto '+(i+1));});
+   else if(data.type==='Feature') coordsFromGeometry(data.geometry,'Destino');
+   else if(data.type && data.coordinates) coordsFromGeometry(data,'Ponto');
+   else if(data.geometry) coordsFromGeometry(data.geometry,'Destino');
+   else {
+     // Generic JSON: detect arrays named coordinates, latitude/longitude or lat/lng.
+     const seen=new Set();
+     function walk(o){
+       if(!o||typeof o!=='object')return;
+       if(Array.isArray(o)){if(o.length>=2&&typeof o[0]==='number'&&typeof o[1]==='number'){const a=o[0],b=o[1];if(validCoord(b,a)){const k=a+','+b;if(!seen.has(k)){seen.add(k);addStop(b,a,'Ponto '+(stops.length+1));}return;}}o.forEach(walk);return;}
+       const lat=o.lat??o.latitude, lon=o.lon??o.lng??o.longitude;
+       if(lat!==undefined&&lon!==undefined&&validCoord(Number(lat),Number(lon))){const k=lat+','+lon;if(!seen.has(k)){seen.add(k);addStop(Number(lat),Number(lon),o.name||o.nome||('Destino '+(stops.length+1)));}}
+       for(const [k,v] of Object.entries(o)){if(k!=='coordinates')walk(v);else walk(v);}
+     }
+     walk(data);
+   }
+   renderStops();
+   const pts=stops.map(s=>[s.lat,s.lon]).concat(lineCoords);
+   if(pts.length){map.fitBounds(L.latLngBounds(pts).pad(.15));toast('Arquivo importado. '+stops.length+' destino(s) encontrado(s).');}
+   else toast('Arquivo lido, mas não encontrei coordenadas reconhecidas.');
+ }
+ $('file').addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;try{const data=JSON.parse(await f.text());parseJson(data)}catch(err){toast('Não consegui ler o arquivo. Verifique se é um JSON válido.')}});
+ function renderStops(){
+   routeLayers.filter(l=>l!==routeLine).forEach(l=>map.removeLayer(l));routeLayers=routeLayers.filter(l=>l===routeLine);
+   stops.forEach((s,i)=>{const icon=L.divIcon({className:'',html:`<div style="background:${s.done?'#4ade80':(i===nextIndex()?'#39b6ff':'#253746')};color:${s.done?'#06200f':'white'};border:2px solid white;border-radius:50%;width:30px;height:30px;display:grid;place-items:center;font-weight:800;box-shadow:0 2px 6px #0008">${i+1}</div>`,iconSize:[30,30],iconAnchor:[15,15]});const m=L.marker([s.lat,s.lon],{icon}).bindPopup(`<b>${escapeHtml(s.label)}</b><br>${s.lat.toFixed(6)}, ${s.lon.toFixed(6)}<br>${s.done?'Concluída':'Pendente'}`).addTo(map);routeLayers.push(m)});
+   $('pending').textContent=stops.filter(s=>!s.done).length;
+   const idx=nextIndex();$('nextStop').innerHTML=idx<0?'Todas as entregas foram concluídas.':`<strong>${escapeHtml(stops[idx].label)}</strong><br>Destino ${idx+1} de ${stops.length}<br>${stops[idx].lat.toFixed(6)}, ${stops[idx].lon.toFixed(6)}`;
+   $('stops').innerHTML=stops.length?stops.map((s,i)=>`<div class="stop ${s.done?'done':''} ${i===idx?'active':''}"><div class="num">${s.done?'✓':i+1}</div><div class="stoptext"><b>${escapeHtml(s.label)}</b><small>${s.lat.toFixed(5)}, ${s.lon.toFixed(5)}</small></div><button class="secondary" data-go="${i}">Ver</button></div>`).join(''):'<p class="status">Nenhum destino carregado.</p>';
+   $('stops').querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>{const s=stops[Number(b.dataset.go)];map.setView([s.lat,s.lon],17);routeLayers.find(l=>l.getLatLng&&l.getLatLng().lat===s.lat)?.openPopup()}));
+   updateDistance();
+ }
+ function nextIndex(){return stops.findIndex(s=>!s.done)}
+ function escapeHtml(x){return String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+ function updateDistance(){const i=nextIndex();if(!userPos||i<0){$('distance').textContent='—';return}const d=map.distance(userPos,[stops[i].lat,stops[i].lon]);$('distance').textContent=d>=1000?(d/1000).toFixed(2)+' km':Math.round(d)+' m'}
+ $('addLink').addEventListener('click',async()=>{
+   const val=$('mapslink').value.trim();if(!val){toast('Cole um link, endereço ou coordenadas.');return}
+   // Parse explicit coordinate pairs and common full Google Maps URLs.
+   let m=val.match(/(-?\d{1,3}\.\d{3,})\s*[,;]\s*(-?\d{1,3}\.\d{3,})/);
+   if(m){let a=Number(m[1]),b=Number(m[2]);if(validCoord(a,b)){// plain coordinates normally entered lat,lon; URL @lat,lon also lat,lon
+     addStop(a,b,'Destino '+(stops.length+1));map.setView([a,b],16);toast('Destino adicionado pelas coordenadas.');return;
+   }}
+   const at=val.match(/@(-?\d+\.\d+),\s*(-?\d+\.\d+)/);
+   if(at&&validCoord(Number(at[1]),Number(at[2]))){addStop(Number(at[1]),Number(at[2]),'Destino '+(stops.length+1));map.setView([Number(at[1]),Number(at[2])],16);toast('Destino extraído do link.');return}
+   const q=val.match(/[?&](?:q|query|destination)=([^&]+)/i);
+   if(q){const decoded=decodeURIComponent(q[1].replace(/\+/g,' '));const c=decoded.match(/(-?\d+\.\d+),\s*(-?\d+\.\d+)/);if(c){addStop(Number(c[1]),Number(c[2]),'Destino '+(stops.length+1));map.setView([Number(c[1]),Number(c[2])],16);toast('Destino extraído do link.');return}}
+   if(/^https?:\/\//i.test(val)){toast('Não consegui extrair as coordenadas deste link. Abra no Google Maps e copie as coordenadas ou o link completo.');return}
+   // Geocode address via Nominatim; public service, use sparingly.
+   try{toast('Procurando endereço…');const r=await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q='+encodeURIComponent(val),{headers:{'Accept-Language':'pt-BR'}});const a=await r.json();if(a.length){addStop(Number(a[0].lat),Number(a[0].lon),val);map.setView([Number(a[0].lat),Number(a[0].lon)],16);toast('Endereço adicionado.')}else toast('Endereço não encontrado. Tente colar as coordenadas.')}catch(e){toast('Falha ao procurar endereço. Cole as coordenadas ou tente novamente.')}
+ });
+ $('gps').addEventListener('click',()=>{
+   if(!navigator.geolocation){toast('Este navegador não oferece GPS.');return}
+   if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null;$('gps').textContent='Ativar GPS';$('gpsStatus').textContent='GPS pausado.';return}
+   $('gpsStatus').textContent='Solicitando permissão de localização…';
+   watchId=navigator.geolocation.watchPosition(pos=>{
+     userPos=[pos.coords.latitude,pos.coords.longitude];const accuracy=pos.coords.accuracy;
+     if(!userMarker)userMarker=L.circleMarker(userPos,{radius:8,color:'#fff',weight:3,fillColor:'#e53935',fillOpacity:1}).addTo(map).bindPopup('Sua localização');
+     else userMarker.setLatLng(userPos);
+     if(!accuracyCircle)accuracyCircle=L.circle(userPos,{radius:accuracy,color:'#e53935',weight:1,fillOpacity:.08}).addTo(map);else accuracyCircle.setLatLng(userPos).setRadius(accuracy);
+     $('gpsStatus').innerHTML='<strong>GPS ativo.</strong> Precisão aproximada: '+Math.round(accuracy)+' m.';
+     $('gps').textContent='Pausar GPS';updateDistance();
+   },err=>{$('gpsStatus').textContent='Não foi possível obter GPS: '+err.message;watchId=null},{enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+ });
+ $('navigate').addEventListener('click',()=>{
+   const i=nextIndex();if(i<0){toast('Adicione um destino primeiro.');return}const s=stops[i];
+   const origin=userPos?`${userPos[0]},${userPos[1]}`:'Current+Location';
+   const url='https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(origin)+'&destination='+encodeURIComponent(s.lat+','+s.lon)+'&travelmode=driving';
+   window.open(url,'_blank','noopener');
+ });
+ $('done').addEventListener('click',()=>{const i=nextIndex();if(i<0){toast('Não há entregas pendentes.');return}stops[i].done=true;renderStops();toast('Entrega marcada como concluída.')});
+ $('skip').addEventListener('click',()=>{const i=nextIndex();if(i<0){toast('Não há próxima entrega.');return}const s=stops.splice(i,1)[0];stops.push(s);renderStops();toast('Próxima entrega selecionada.')});
+ $('fit').addEventListener('click',()=>{const pts=stops.map(s=>[s.lat,s.lon]).concat(lineCoords);if(pts.length)map.fitBounds(L.latLngBounds(pts).pad(.15));else if(userPos)map.setView(userPos,15);else toast('Carregue uma rota primeiro.')});
+ $('clear').addEventListener('click',clearRoute);
+ $('sample').addEventListener('click',()=>{parseJson({type:'FeatureCollection',features:[{type:'Feature',properties:{name:'Entrega 1'},geometry:{type:'Point',coordinates:[-48.882,-10.175]}},{type:'Feature',properties:{name:'Entrega 2'},geometry:{type:'Point',coordinates:[-48.875,-10.18]}},{type:'Feature',properties:{name:'Entrega 3'},geometry:{type:'Point',coordinates:[-48.89,-10.17]}}]});stops.forEach((s,i)=>s.label='Entrega '+(i+1));renderStops()});
+
+ // Saved routes are local to this browser/device.
+ const STORAGE_KEY='rg2_rotas_saved_v1';
+ function getSaved(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]')}catch(e){return []}}
+ function putSaved(items){localStorage.setItem(STORAGE_KEY,JSON.stringify(items));renderSaved()}
+ function renderSaved(){
+   const sel=$('savedRoutes');const items=getSaved();const current=sel.value;
+   sel.innerHTML=items.length?'':'<option value="">Nenhuma rota salva</option>';
+   items.forEach((r,i)=>{const o=document.createElement('option');o.value=String(i);o.textContent=r.name+' ('+r.stops.length+' destinos)';sel.appendChild(o)});
+   if(items.length&&current!=='')sel.value=current;
+ }
+ function routeSnapshot(){return {stops:stops.map(s=>({lat:s.lat,lon:s.lon,label:s.label,done:!!s.done})),lineCoords:lineCoords.map(c=>[c[0],c[1]])}}
+ $('saveRoute').addEventListener('click',()=>{
+   if(!stops.length&&!lineCoords.length){toast('Importe ou adicione uma rota antes de salvar.');return}
+   const name=$('routeName').value.trim()||('Rota '+new Date().toLocaleDateString('pt-BR')+' '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}));
+   const items=getSaved();items.unshift({name,createdAt:new Date().toISOString(),...routeSnapshot()});
+   putSaved(items.slice(0,100));$('savedRoutes').value='0';toast('Rota salva neste aparelho.');
+ });
+ $('loadRoute').addEventListener('click',()=>{
+   const idx=Number($('savedRoutes').value);const r=getSaved()[idx];if(!r){toast('Selecione uma rota salva.');return}
+   clearLayers();stops=(r.stops||[]).map(s=>({...s}));lineCoords=(r.lineCoords||[]).map(c=>[Number(c[0]),Number(c[1])]);
+   if(lineCoords.length>1)drawLine(lineCoords);renderStops();const pts=stops.map(s=>[s.lat,s.lon]).concat(lineCoords);
+   if(pts.length)map.fitBounds(L.latLngBounds(pts).pad(.15));$('routeName').value=r.name||'';toast('Rota salva carregada.');
+ });
+ $('deleteRoute').addEventListener('click',()=>{
+   const idx=Number($('savedRoutes').value);const items=getSaved();if(!items[idx]){toast('Selecione uma rota salva.');return}
+   const removed=items.splice(idx,1)[0];putSaved(items);toast('Rota "'+removed.name+'" excluída.');
+ });
+ $('exportRoute').addEventListener('click',()=>{
+   const snap=routeSnapshot();if(!snap.stops.length&&!snap.lineCoords.length){toast('Não há rota para exportar.');return}
+   const features=snap.stops.map(s=>({type:'Feature',properties:{name:s.label,done:s.done},geometry:{type:'Point',coordinates:[s.lon,s.lat]}}));
+   if(snap.lineCoords.length>1)features.push({type:'Feature',properties:{name:'Trajeto importado'},geometry:{type:'LineString',coordinates:snap.lineCoords.map(c=>[c[1],c[0]])}});
+   const blob=new Blob([JSON.stringify({type:'FeatureCollection',features},null,2)],{type:'application/geo+json'});
+   const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='rg2-rota.geojson';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ });
+ renderSaved();
+
+ // PWA install prompt (Chromium browsers) and service worker.
+ let deferredInstallPrompt=null;
+ window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstallPrompt=e;$('installApp').style.display='inline-flex';$('installStatus').textContent='O navegador permite instalar o RG2 Rotas.'});
+ $('installApp').addEventListener('click',async()=>{
+   if(!deferredInstallPrompt){toast('Use o menu do navegador e escolha "Adicionar à tela inicial".');return}
+   deferredInstallPrompt.prompt();await deferredInstallPrompt.userChoice;deferredInstallPrompt=null;$('installApp').style.display='none';
+ });
+ $('refreshApp').addEventListener('click',()=>location.reload());
+ if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+   window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').then(()=>{$('installStatus').textContent='PWA pronto. Use o menu do navegador para instalar, se o botão não aparecer.'}).catch(()=>{$('installStatus').textContent='Não foi possível ativar o cache offline neste endereço.'}));
+ }
+})();
+</script>
+</body>
+</html>
